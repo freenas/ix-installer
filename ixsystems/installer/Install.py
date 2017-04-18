@@ -16,10 +16,10 @@ import freenasOS.Package as Package
 import freenasOS.Configuration as Configuration
 import freenasOS.Installer as Installer
 
-import Utils
-from Utils import InitLog, LogIt, Project, Title, SetProject
-from Utils import DiskInfo, SmartSize, RunCommand, RunCommandException
-from Utils import Partition
+from . import Utils
+from .Utils import InitLog, LogIt, Project, Title, SetProject
+from .Utils import DiskInfo, SmartSize, RunCommand, RunCommandException
+from .Utils import Partition
 
 zfs = libzfs.ZFS()
 

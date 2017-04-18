@@ -13,12 +13,12 @@ import enum
 import freenasOS.Manifest as Manifest
 import freenasOS.Configuration as Configuration
 
-import Install
-from Install import InstallationError
+from . import Install
+from .Install import InstallationError
 
-import Utils
-from Utils import InitLog, LogIt, Title, Project, SetProject
-from Utils import BootMethod, DiskRealName, SmartSize, RunCommand
+from . import Utils
+from .Utils import InitLog, LogIt, Title, Project, SetProject
+from .Utils import BootMethod, DiskRealName, SmartSize, RunCommand
 
 zfs = libzfs.ZFS()
 
