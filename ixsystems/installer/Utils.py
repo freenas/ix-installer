@@ -136,6 +136,27 @@ def BootPartitionType(diskname):
         LogIt("Could not find a disk for {}".format(diskname))
     return None
 
+def SerialConsole():
+    # If the system booted via serial console, return (port, baud_rate).
+    # Either value may be None.  Returns (None, None) if it can't determine
+    # the values.
+    try:
+        uart = subprocess.check_output(["/bin/kenv", "hw.uart.console"]).rstrip()
+    except:
+        return (None, None)
+    port_result = re.match(r'io:([0-9a-fx]+)', uart)
+    if port_result:
+        port = port_result.group(1)
+    else:
+        port = None
+        
+    baud_result = re.match(r'br:([0-9]+)', uart)
+    if baud_result:
+        br = baud_result.group(1)
+    else:
+        br = None
+    return (port, br)
+
 def BootMethod():
     try:
         platform = subprocess.check_output(["/bin/kenv", "grub.platform"]).rstrip()

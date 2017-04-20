@@ -18,7 +18,7 @@ import freenasOS.Installer as Installer
 
 from . import Utils
 from .Utils import InitLog, LogIt, Project, Title, SetProject
-from .Utils import DiskInfo, SmartSize, RunCommand, RunCommandException
+from .Utils import SerialConsole, DiskInfo, SmartSize, RunCommand, RunCommandException
 from .Utils import Partition
 
 zfs = libzfs.ZFS()
@@ -34,6 +34,44 @@ upgrade_paths = [
 ]
 
     
+def SaveSerialSettings(mount_point):
+    # See if we booted via serial port, and, if so, update the sqlite database.
+    # I don't like that this uses sqlite3 directly, but there is currently no
+    # wrapping command (so I am told) to handle it.  This of course will cause
+    # terrible problems if the database changes.
+    dbfile = "/data/freenas-v1.db"
+    try:
+        serial_boot = sysctl.sysctlbyname("debug.boothowto")
+    except:
+        # Couldn't find it, so just ignore it
+        return
+    if (serial_boot & 0x1000) == 0:
+        return
+    import sqlite3
+    
+    (port, baud) = SerialConsole()
+
+    try:
+        db = sqlite3.connect(mount_point + dbfile)
+        db.text_factor = str
+        db.row_factor = sqlite3.Row
+        cursor = db.cursor()
+        sql = "UPDATE system_advanced SET adv_serial = ?"
+        parms = (1,)
+        if br:
+            sql += ", adv_serialspeed = ?"
+            parms += (br,)
+        if port:
+            sql += ", adv_serialport = ?"
+            parms += (port,)
+        LogIt("SaveSerialSettings:  sql = {}, parms = {}".format(sql, parms))
+        cursor.execute(sql, parms)
+        cursor.commit()
+        cursor.close()
+    except:
+        LogIt("Could not save serial port settings", exc_info=True)
+        raise
+        
 def InstallGrub(chroot, disks, bename, efi=False):
     # Tell beadm to activate the dataset, and make the grub
     # configuration.
@@ -862,7 +900,17 @@ def Install(**kwargs):
                 LogIt("Got exception {} while trying to set cachefile".format(str(e)))
                 raise InstallationException("Could not set cachefile on boot pool")
             LogIt("Set cachefile to /boot/zfs/rpool.cache")
+            # We need to set the serial port stuff in the database before running grub,
+            # because it'll use that in the configuration file it generates.
             try:
+                SaveSerialSettings(mount_point)
+            except:
+                raise InstallationError("Could not save serial console settings")
+
+            try:
+                # All boot pool disks are partitioned using the same type.
+                # Or the darkness rises and squit once again rule the earth.
+                # (It's happened.)
                 use_efi = Utils.BootPartitionType(freenas_boot.disks[0]) == "efi"
                 InstallGrub(chroot=mount_point,
                             disks=freenas_boot.disks,
