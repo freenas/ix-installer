@@ -83,9 +83,13 @@ class ValidationError(RuntimeError):
     def __init__(self, code=ValidationCode.OK, message="<no error>"):
         super(ValidationError, self).__init__(message)
         self._code = code
+        self._message = message
     @property
     def code(self):
         return self._code
+    @property
+    def message(self):
+        return self._message
     
 def validate_disk(name):
     """
