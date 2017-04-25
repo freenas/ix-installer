@@ -287,22 +287,33 @@ Do you want to use them for the installation?
                 reuse = False
                 # Let an escape exception percolate up
                 reuse = box.result
+                LogIt("reuse = {}".format(reuse))
                 if reuse:
                     return disks
 
     disks = list(geom.class_by_name("DISK").geoms)
     disks_menu = []
-    for disk in disks:
-        diskSize = int(disk.provider.mediasize / (1024 * 1024 * 1024))
-        diskDescr = disk.provider.description[:20]
+    LogIt("Looking at system disks {}".format(disks))
+    for disk_geom in disks:
+        try:
+            disk_real_name = disk_geom.name
+        except:
+            LogIt("Could not translate {} to a real disk name".format(disk_geom))
+            continue
+        disk = Utils.Disk(disk_real_name)
+        if disk is None:
+            LogIt("Could not translate name {} to a disk object".format(disk_real_name))
+            continue
+        diskSize = int(disk.size / (1024 * 1024 * 1024))
+        diskDescr = disk.description[:20]
         if diskSize < 4:
             # 4GBytes or less is just too small
             continue
         # Also want to see if the disk is currently mounted
         try:
-            validate_disk(disk_name)
+            validate_disk(disk.name)
         except ValidationError as e:
-            LogIt("Could not validate disk {}: {}".format(disk_name, e.message))
+            LogIt("Could not validate disk {}: {}".format(disk.name, e.message))
             continue
         
         disks_menu.append(Dialog.ListItem(disk.name, "{} ({}GBytes)".format(diskDescr, diskSize)))
@@ -611,9 +622,7 @@ Do you want to upgrade?""".format(Project(), Project())
     yesno.default = False
     yesno = Dialog.YesNo("{} Installation Confirmation".format(Project()),
                          text,
-                         height=height, width=60,
-                         yes_label="Continue",
-                         no_label="Cancel",
+                         height=min(15, height), width=60,
                          default=False)
     if yesno.result == False:
         LogIt("Installation aborted at first confirmation")
