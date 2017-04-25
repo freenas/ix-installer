@@ -216,6 +216,19 @@ def FormatDisks(disks, partitions, interactive):
     try:
         os_partition = None
         for disk in disks:
+            # One thing we have to worry about is gmirror, which won't
+            # let us repartition if it's in use.  So we need to find out
+            # if the disk is in use by a mirror, and if so, we need
+            # to remove the appropriate device, partition, or label from
+            # the mirror.  (Note that there may be more than one mapping,
+            # conceivably, so what we need is a pairing of object -> mirror name.
+            
+            for mname in Utils.FindMirrors(disk):
+                try:
+                    RunCommand("/sbin/gmirror remove {} {}".format(mname, disk.name))
+                except:
+                    LogIt("Unable to remove {} from mirror {}; this may cause a failure in a bit".format(disk.name, mname))
+                    
             RunCommand("/sbin/gpart", "create", "-s", "GPT", "-f", "active", disk.name)
             # For best purposes, the freebsd-boot partition-to-be
             # should be the last one in the list.

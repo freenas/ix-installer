@@ -89,7 +89,10 @@ def FindMirrors(disk):
     gmirror is stubborn, and we want to find any mirrors that use the given disk.
     XXX: Other classes are probably just as stubborn!
     """
-    for mirror in geom.class_by_name("MIRROR").geoms:
+    mirrors = geom.class_by_name("MIRROR")
+    if not mirrors:
+        return
+    for mirror in mirrors.geoms:
         for geom_entry in mirror.consumers:
             rn = DiskRealName(geom_entry.provider.geom)
             if rn == DiskRealName(disk):

@@ -3,6 +3,7 @@ import os, sys
 import subprocess
 import time
 import argparse
+import tempfile
 import bsd
 import bsd.dialog as Dialog
 import bsd.geom as geom
