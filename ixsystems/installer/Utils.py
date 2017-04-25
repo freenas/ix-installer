@@ -84,6 +84,17 @@ class Partition(object):
     def smart_size(self):
         return SmartSize(self.size)
     
+def FindMirrors(disk):
+    """
+    gmirror is stubborn, and we want to find any mirrors that use the given disk.
+    XXX: Other classes are probably just as stubborn!
+    """
+    for mirror in geom.class_by_name("MIRROR").geoms:
+        for geom_entry in mirror.consumers:
+            rn = DiskRealName(geom_entry.provider.geom)
+            if rn == DiskRealName(disk):
+                yield mirror.name
+            
 def SetProject(project="FreeNAS"):
     LoadAvatar()
     _avatar["AVATAR_PROJECT"] = project
@@ -392,6 +403,14 @@ def GetPackages(manifest, conf, cache_dir, interactive=False):
                     raise InstallationError("Missing package {}".format(pkg.Name()))
                 else:
                     pkg_file.close()
+        try:
+            # I have no idea why I need this.
+            # Without this, the next YesNo dialog won't be able to use arrow keys.
+            # Investigate this
+            Dialog.MessageBox("", "Packages Verified", wait=False).run()
+        except:
+            pass
+
     except InstallationError:
         raise
     except BaseException as e:
