@@ -355,7 +355,7 @@ def do_install():
     arg_parser.add_argument('-U', '--url',
                             dest="url",
                             help="URL to use when fetching files")
-    arg_parser.add_argument("-D", "--data",
+    arg_parser.add_argument('-D', "--data",
                             dest='data_dir',
                             help='Path to /data prototype directory')
     arg_parser.add_argument('-M', '--manifest',

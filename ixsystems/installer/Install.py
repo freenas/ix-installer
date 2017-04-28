@@ -17,7 +17,7 @@ import freenasOS.Configuration as Configuration
 import freenasOS.Installer as Installer
 
 from . import Utils
-from .Utils import InitLog, LogIt, Project, Title, SetProject
+from .Utils import InitLog, LogIt, Project, Title, SetProject, IsTruenas
 from .Utils import SerialConsole, DiskInfo, SmartSize, RunCommand, RunCommandException
 from .Utils import Partition
 
@@ -222,12 +222,11 @@ def FormatDisks(disks, partitions, interactive):
             # to remove the appropriate device, partition, or label from
             # the mirror.  (Note that there may be more than one mapping,
             # conceivably, so what we need is a pairing of object -> mirror name.
-            
-            for mname in Utils.FindMirrors(disk):
+            for (mname, pname) in Utils.FindMirrors(disk):
                 try:
-                    RunCommand("/sbin/gmirror remove {} {}".format(mname, disk.name))
+                    RunCommand("/sbin/gmirror remove {} {}".format(mname, pname))
                 except:
-                    LogIt("Unable to remove {} from mirror {}; this may cause a failure in a bit".format(disk.name, mname))
+                    LogIt("Unable to remove {} from mirror {}; this may cause a failure in a bit".format(pname, mname))
                     
             RunCommand("/sbin/gpart", "create", "-s", "GPT", "-f", "active", disk.name)
             # For best purposes, the freebsd-boot partition-to-be
@@ -522,6 +521,8 @@ def Install(**kwargs):
     		(indicating no password, not recommended).
     - partitions	An array of Partition objects (see Utils).  Note that the OS
     			partition will always be installed last.
+    - post_install	An array of callable objects, which will be called after installation,
+    			as func(mount_point=/path, **kwargs).  MUST BE AN ARRAY.
     - package_handler	Call-back for the start of each package.  Arguments are
 			(index [int], name [string], packages [array of package names])
     			be installed.
@@ -546,7 +547,8 @@ def Install(**kwargs):
     upgrade = kwargs.get("upgrade", False)
     data_dir = kwargs.get("data_dir", "/data")
     password = kwargs.get("password", None)
-    extra_partitions = kwargs.get("partitions", None)
+    extra_partitions = kwargs.get("partitions", [])
+    post_install = kwargs.get("post_install", [])
     package_notifier = kwargs.get("package_handler", None)
     progress_notifier = kwargs.get("progress_handler", None)
     manifest = kwargs.get("manifest", None)
@@ -554,6 +556,9 @@ def Install(**kwargs):
     # The default is based on ISO layout
     package_dir = kwargs.get("package_directory", "/.mount/{}/Packages".format(Project()))
 
+    if type(post_install) != list:
+        post_install = [post_install]
+        
     if not manifest:
         if interactive:
             try:
@@ -581,6 +586,21 @@ def Install(**kwargs):
                               height=10, width=30).run()
         raise InstallationError("No disks or previous boot pool selected")
     
+    if IsTruenas():
+        # We use a 16g swap partition in TrueNAS.
+        # Note that this is only used if the disks are being formatted.
+        extra_partitions.append(Partition(type="swap", index="3", size=16*1024*1024*1024))
+        def make_tn_swap(mount_point=None, **kwargs):
+            # This uses the previously-defined variables, not kwargs
+            if disks and mount_point:
+                try:
+                    RunCommand("/sbin/gmirror", "label", "-b", "prefer",
+                               ["{}p3".format(disk.name) for disk in disks])
+                    with open(os.path.join(mount_point, "data/fstab.swap"), "w") as swaptab:
+                        print("/dev/mirror/swap.eli\tnone\tswap\tsw\t0\t0", file=swaptab)
+                except RunCommandException as e:
+                    LogIt("Could not create mirrored swap: {}".format(str(e)))
+        post_install.append(make_tn_swap)
     # First step is to see if we're upgrading.
     # If so, we want to copy files from the active BE to
     # a location in /tmp, so we can copy them back later.
@@ -991,6 +1011,11 @@ def Install(**kwargs):
 
         # We save the manifest
         manifest.Save(mount_point)
+
+        # Okay!  Now if there are any post-install functions, we call them
+        for fp in post_install:
+            fp(mount_point=mount_point, **kwargs)
+
         # And we're done!
         end_time = time.time()
     except InstallationError as e:

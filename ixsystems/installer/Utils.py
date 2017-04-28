@@ -10,13 +10,16 @@ from freenasOS.Update import PkgFileFullOnly
 
 _avatar = None
 
-def LoadAvatar():
+def LoadAvatar(path="/etc/avatar.conf"):
     global _avatar
-    if _avatar is None:
-        _avatar = { "AVATAR_PROJECT" : "FreeNAS" }
+    if _avatar is None or _avatar["path"] != path:
+        _avatar = {
+            "AVATAR_PROJECT" : "FreeNAS",
+            "path" : path,
+        }
         regexp = re.compile(r'export ([^=]*)="(.*)"$')
         try:
-            with open("/etc/avatar.conf", "r") as conf:
+            with open(path, "r") as conf:
                 for line in conf:
                     line = line.rstrip()
                     result = regexp.match(line)
@@ -87,6 +90,7 @@ class Partition(object):
 def FindMirrors(disk):
     """
     gmirror is stubborn, and we want to find any mirrors that use the given disk.
+    disk is the name, e.g. ada0, not a path or partition.
     XXX: Other classes are probably just as stubborn!
     """
     mirrors = geom.class_by_name("MIRROR")
@@ -95,41 +99,44 @@ def FindMirrors(disk):
     for mirror in mirrors.geoms:
         for geom_entry in mirror.consumers:
             rn = DiskRealName(geom_entry.provider.geom)
-            if rn == DiskRealName(disk):
-                yield mirror.name
+            if rn == disk:
+                yield (mirror.name, geom_entry.provider.name)
             
 def SetProject(project="FreeNAS"):
-    LoadAvatar()
+    if _avatar is None:
+        LoadAvatar()
     _avatar["AVATAR_PROJECT"] = project
 
     
 def Project():
-    LoadAvatar()
+    if _avatar is None:
+        LoadAvatar()
     return _avatar["AVATAR_PROJECT"]
 
 # Convenience function
 def Title():
     return Project() + " Installer"
 
-logfile = "/tmp/install.log"
-def InitLog():
-    return
-    
+logfile = None
+def InitLog(output="/tmp/install.log"):
+    global logfile
+    if output.__class__ == str:
+        logfile = open(output, "a")
+    else:
+        logfile = output
+        
 def LogIt(msg, exc_info=False):
     import traceback
-    try:
-        with open(logfile, "a") as f:
-            print(msg, file=f)
-            if exc_info:
-                exc = sys.exc_info()
-                if exc:
-                    print("Exception {}:".format(str(exc)), file=f)
-                    for stack in traceback.extract_tb(exc[2]):
-                        print("\t{}".format(stack), file=f)
-                        
-    except BaseException as e:
-        print("Could not open log file: {}".format(str(e)))
-        sys.exit(1)
+    if logfile is None:
+        InitLog()
+    print(msg, file=logfile)
+    if exc_info:
+        exc = sys.exc_info()
+        if exc:
+            print("Exception {}:".format(str(exc)), file=logfile)
+            for stack in traceback.extract_tb(exc[2]):
+                print("\t{}".format(stack), file=logfile)
+                
 
 def BootPartitionType(diskname):
     """
@@ -470,78 +477,6 @@ def IsTruenas():
     is whether we're going to set up the partitions a bit differently.
     """
     return _avatar.get("AVATAR_PROJECT", "FreeNAS") == "TrueNAS"
-
-def ParseConfig(path="/etc/install.conf"):
-    """
-    Parse a configuration file used to automate installations.
-    The result is a dictionary with the values parsed into their
-    correct types.  The supported settings are:
-
-    minDiskSize
-    maxDiskSize:	A value indicationg the minimum and maximum disk size
-    		when searching for disks.  No default value.
-    whenDone:	A string, eithe reboot, wait, or halt, indicating what action to
-		take after the installation is finished.  Default is to reboot.
-    upgrade:	A string, "yes" or "no", indicating whether or not to do an upgrade.
-    		Default is not to upgrade.
-    mirror:	A string, "yes" or "no" or "force", indicating whether or not to install
-    		to a mirror.
-    format:	A string, either "efi" or "bios", indicating how to format the disk.
-    		Default is None, which means not to format at all.
-    disk,
-    disks	A string indicating which disks to use for the installation.
-    diskCount:	An integer, indicating how many disks to use when mirroring.
-
-    By default, it will select the first disk it finds.  If mindDiskSize and/or maxDiskSize
-    are set, it will use those to filter out disks.  If mirror is True, then it will use either
-    two or diskCount (if set) disks to createa  mirror; if mirror is set to "force", then it
-    will fail if it cannot find enough disks to create a mirror.
-    """
-
-    def yesno(s):
-        if s.lower() in ["yes", "true"]:
-            return True
-        return False
-    
-    rv = {
-        "whenDone" : "reboot",
-        "upgrade"  : False,
-        "mirror"   : False,
-    }
-    try:
-        with open(path, "r") as f:
-            for line in f:
-                line = line.rstrip()
-                if line.startswith("#"):
-                    continue
-                if not '=' in line:
-                    continue
-                (key, val) = line.split("=")
-                if key in ["minDiskSize", "maxDiskSize"]:
-                    val = ParseSize(val)
-                elif key == "whenDone":
-                    if val not in ["reboot", "wait", "halt"]:
-                        continue
-                elif key == "upgrade":
-                    val = yesno(val)
-                elif key == "format":
-                    if val not in ["efi", "bios"]:
-                        continue
-                elif key == "mirror":
-                    if val.lower() == "force":
-                        val = True
-                        rv["forceMirror"] = True
-                    else:
-                        val = yesno(val)
-                elif key in ["disk", "disks"]:
-                    val = var.split()
-                elif key == "diskCount":
-                    val = int(val)
-                    
-                rv[key] = val
-    except:
-        pass
-    return rv
 
 if _avatar is None:
     LoadAvatar()
