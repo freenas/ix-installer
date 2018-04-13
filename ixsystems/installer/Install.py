@@ -963,7 +963,7 @@ def Install(**kwargs):
                     status.run()
                 except BaseException as e:
                     LogIt("Finalizing got exception {}".format(str(e)))
-                    
+
             # This is FN9 specific
             with open("{}/data/first-boot".format(mount_point), "wb"):
                 pass
@@ -986,6 +986,10 @@ def Install(**kwargs):
                 except RunCommandException as e:
                     LogIt("Setting root password: {}".format(str(e)))
                     raise InstallationError("Unable to set root password")
+            if IsTruenas():
+                if not upgrade:
+                    with open("{}/data/truenas_eula_pending".format(mount_point), "wb"):
+                        pass
         except BaseException as e:
             LogIt("Got exception {} during configuration".format(str(e)))
             if interactive:
